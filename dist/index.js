@@ -36,12 +36,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InviteTracker = void 0;
+exports.InviteTracker = exports.InviteTrackerSchema = exports.InviteTrackerTypes = void 0;
 const events_1 = require("events");
 const mongoose_1 = __importDefault(require("mongoose"));
 const discord_js_1 = require("discord.js");
 const Types = __importStar(require("./types"));
 const inviteSchema_1 = __importDefault(require("./inviteSchema"));
+// Export types and schema for external use.
+exports.InviteTrackerTypes = __importStar(require("./types"));
+exports.InviteTrackerSchema = __importStar(require("./inviteSchema"));
 class InviteTracker extends events_1.EventEmitter {
     // TODO: Add verbose option to the constructor to enable/disable verbose logging.
     // TODO: Add queue system to handle invite tracking in case of high traffic.

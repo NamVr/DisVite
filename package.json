@@ -1,6 +1,6 @@
 {
 	"name": "discord-invite-tracker",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "An advanced discord tracking module with native mongoose support.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",

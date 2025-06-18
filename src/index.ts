@@ -4,6 +4,10 @@ import { Client, Collection, GuildMember, Guild } from "discord.js";
 import * as Types from "./types";
 import InviteSchema from "./inviteSchema";
 
+// Export types and schema for external use.
+export * as InviteTrackerTypes from "./types";
+export * as InviteTrackerSchema from "./inviteSchema";
+
 export class InviteTracker extends EventEmitter {
 	public client: Client;
 	public invites = new Map<string, Collection<string, number>>();

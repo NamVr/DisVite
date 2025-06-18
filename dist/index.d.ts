@@ -1,5 +1,7 @@
 import { EventEmitter } from "events";
 import { Client, Collection, GuildMember, Guild } from "discord.js";
+export * as InviteTrackerTypes from "./types";
+export * as InviteTrackerSchema from "./inviteSchema";
 export declare class InviteTracker extends EventEmitter {
     client: Client;
     invites: Map<string, Collection<string, number>>;
