@@ -1,0 +1,25 @@
+{
+  "name": "discord-invite-tracker",
+  "version": "1.0.0",
+  "description": "An advanced discord tracking module with native mongoose support.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": ["discord", "invite", "tracker", "mongoose", "bot", "discord-invite-tracker", "mongo-db"],
+  "author": "Naman Vrati",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.x.x",
+    "mongoose": "^8.x.x"
+  },
+  "devDependencies": {
+    "typescript": "^5.x.x"
+  }
+}
