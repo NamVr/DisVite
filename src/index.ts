@@ -5,8 +5,8 @@ import * as Types from "./types";
 import InviteSchema from "./inviteSchema";
 
 export class InviteTracker extends EventEmitter {
-	private client: Client;
-	private invites = new Map<string, Collection<string, number>>();
+	public client: Client;
+	public invites = new Map<string, Collection<string, number>>();
 
 	// TODO: Add verbose option to the constructor to enable/disable verbose logging.
 	// TODO: Add queue system to handle invite tracking in case of high traffic.
@@ -17,7 +17,7 @@ export class InviteTracker extends EventEmitter {
 		this.initialize();
 	}
 
-	private async connectToDatabase(mongoURI: string, attempt = 1) {
+	protected async connectToDatabase(mongoURI: string, attempt = 1) {
 		try {
 			await mongoose.connect(mongoURI);
 			console.info("Discord Invite Tracker: Connected to MongoDB");
@@ -46,7 +46,7 @@ export class InviteTracker extends EventEmitter {
 		}
 	}
 
-	private initialize() {
+	protected initialize() {
 		this.client.once("ready", () => {
 			this.cacheGuildInvites();
 			console.info(
@@ -73,7 +73,7 @@ export class InviteTracker extends EventEmitter {
 	}
 
 	// Cache invites for a single guild, including vanity.
-	private async cacheGuildInvitesForGuild(guild: Guild, attempt = 1) {
+	protected async cacheGuildInvitesForGuild(guild: Guild, attempt = 1) {
 		try {
 			const fetchedInvites = await guild.invites.fetch();
 			const inviteCollection = new Collection<string, number>();
@@ -116,13 +116,13 @@ export class InviteTracker extends EventEmitter {
 		}
 	}
 
-	private async cacheGuildInvites() {
+	protected async cacheGuildInvites() {
 		for (const guild of this.client.guilds.cache.values()) {
 			await this.cacheGuildInvitesForGuild(guild);
 		}
 	}
 
-	private async inviteJoin(member: GuildMember) {
+	protected async inviteJoin(member: GuildMember) {
 		const { guild } = member;
 		const cachedInvites = this.invites.get(guild.id);
 
@@ -204,7 +204,7 @@ export class InviteTracker extends EventEmitter {
 		this.client.emit("inviteJoin", member, inviteInfo);
 	}
 
-	private async detectFakeInvite(member: GuildMember): Promise<boolean> {
+	protected async detectFakeInvite(member: GuildMember): Promise<boolean> {
 		// Check account age (default is 7 days).
 		const accountAgeLimit = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 		const accountAge = Date.now() - member.user.createdAt.getTime();
@@ -233,7 +233,7 @@ export class InviteTracker extends EventEmitter {
 		return false;
 	}
 
-	private async inviteLeave(member: GuildMember) {
+	protected async inviteLeave(member: GuildMember) {
 		// Find the latest join record to update leftAt.
 		const joinRecord = await InviteSchema.findOne({
 			guildId: member.guild.id,
