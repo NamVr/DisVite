@@ -1,14 +1,14 @@
 import { EventEmitter } from "events";
-import { Client } from "discord.js";
+import { Client, Collection, GuildMember, Guild } from "discord.js";
 export declare class InviteTracker extends EventEmitter {
-    private client;
-    private invites;
+    client: Client;
+    invites: Map<string, Collection<string, number>>;
     constructor(client: Client, mongoURI: string);
-    private connectToDatabase;
-    private initialize;
-    private cacheGuildInvitesForGuild;
-    private cacheGuildInvites;
-    private inviteJoin;
-    private detectFakeInvite;
-    private inviteLeave;
+    protected connectToDatabase(mongoURI: string, attempt?: number): Promise<void>;
+    protected initialize(): void;
+    protected cacheGuildInvitesForGuild(guild: Guild, attempt?: number): Promise<void>;
+    protected cacheGuildInvites(): Promise<void>;
+    protected inviteJoin(member: GuildMember): Promise<void>;
+    protected detectFakeInvite(member: GuildMember): Promise<boolean>;
+    protected inviteLeave(member: GuildMember): Promise<void>;
 }

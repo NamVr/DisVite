@@ -140,7 +140,7 @@ class InviteTracker extends events_1.EventEmitter {
         };
         if (!cachedInvites) {
             await this.cacheGuildInvitesForGuild(guild); // Try to cache for next time
-            this.emit("inviteJoin", member, inviteInfo);
+            this.client.emit("inviteJoin", member, inviteInfo);
             return;
         }
         // 1. Fetch current invites to find the one with an increased user count.
@@ -191,7 +191,7 @@ class InviteTracker extends events_1.EventEmitter {
             console.error(`Discord Invite Tracker: Failed to save invite data for ${member.id} in guild ${guild.id}\n`, error);
         });
         // 5. Emit an event with the invite info.
-        this.emit("inviteJoin", member, inviteInfo);
+        this.client.emit("inviteJoin", member, inviteInfo);
     }
     async detectFakeInvite(member) {
         // Check account age (default is 7 days).
@@ -231,7 +231,7 @@ class InviteTracker extends events_1.EventEmitter {
             });
         }
         // Finally emit the custom leave event.
-        this.emit("inviteLeave", member, joinRecord);
+        this.client.emit("inviteLeave", member, joinRecord);
     }
 }
 exports.InviteTracker = InviteTracker;
