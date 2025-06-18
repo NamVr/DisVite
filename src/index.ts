@@ -137,7 +137,7 @@ export class InviteTracker extends EventEmitter {
 
 		if (!cachedInvites) {
 			await this.cacheGuildInvitesForGuild(guild); // Try to cache for next time
-			this.emit("inviteJoin", member, inviteInfo);
+			this.client.emit("inviteJoin", member, inviteInfo);
 			return;
 		}
 
@@ -201,7 +201,7 @@ export class InviteTracker extends EventEmitter {
 		});
 
 		// 5. Emit an event with the invite info.
-		this.emit("inviteJoin", member, inviteInfo);
+		this.client.emit("inviteJoin", member, inviteInfo);
 	}
 
 	private async detectFakeInvite(member: GuildMember): Promise<boolean> {
@@ -252,6 +252,6 @@ export class InviteTracker extends EventEmitter {
 		}
 
 		// Finally emit the custom leave event.
-		this.emit("inviteLeave", member, joinRecord);
+		this.client.emit("inviteLeave", member, joinRecord);
 	}
 }
