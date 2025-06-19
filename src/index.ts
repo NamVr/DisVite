@@ -5,8 +5,7 @@ import * as Types from "./types";
 import { getInviteModel } from "./inviteSchema";
 
 // Export types and schema for external use.
-export * as InviteTrackerTypes from "./types";
-export * as InviteTrackerSchema from "./inviteSchema";
+export * from "./types";
 
 export class InviteTracker extends EventEmitter {
 	public client: Client;

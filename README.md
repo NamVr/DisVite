@@ -101,7 +101,7 @@ const tracker = new InviteTracker(client, "mongodb://localhost:27017/mydb", {
 
 /**
  * @param {import('discord.js').GuildMember} member
- * @param {import('disvite').InviteTrackerTypes.InviteInfo} info
+ * @param {import('disvite').InviteInfo} info
  */
 tracker.on("inviteJoin", (member, info) => {
 	console.log(`${member.user.tag} joined via:`, info);
@@ -137,13 +137,13 @@ Pass these as the third argument to the `InviteTracker` constructor.
 
 ### TypeScript
 
-All types are exported as a namespace:
+All types are exported as individual types:
 
 ```typescript
-import { InviteTrackerTypes } from "disvite";
+import { InviteInfo } from "disvite";
 
 // Example:
-const info: InviteTrackerTypes.InviteInfo = { ... };
+const info: InviteInfo = { ... };
 ```
 
 ### JavaScript (JSDoc)
@@ -152,7 +152,7 @@ Reference types for IntelliSense:
 
 ```javascript
 /**
- * @param {import('disvite').InviteTrackerTypes.InviteInfo} info
+ * @param {import('disvite').InviteInfo} info
  */
 function handleInvite(info) { ... }
 ```
@@ -161,7 +161,7 @@ Or define a global typedef:
 
 ```javascript
 /**
- * @typedef {import('disvite').InviteTrackerTypes.InviteInfo} InviteInfo
+ * @typedef {import('disvite').InviteInfo} InviteInfo
  */
 ```
 
@@ -210,7 +210,7 @@ class MyTracker extends InviteTracker {
 A: Ensure your bot has the `GUILD_MEMBERS` and `GUILD_INVITES` intents enabled and the correct permissions.
 
 **Q: How do I use the types in JavaScript?**  
-A: Use JSDoc with `import('disvite').InviteTrackerTypes.InviteInfo`.
+A: Use JSDoc with `import('disvite').<Type>`.
 
 **Q: How do I change the MongoDB model name?**  
 A: Pass `modelName: "yourModelName"` in the options object.

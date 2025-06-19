@@ -2,8 +2,7 @@ import { EventEmitter } from "events";
 import { Model, Document } from "mongoose";
 import { Client, Collection, GuildMember, Guild } from "discord.js";
 import * as Types from "./types";
-export * as InviteTrackerTypes from "./types";
-export * as InviteTrackerSchema from "./inviteSchema";
+export * from "./types";
 export declare class InviteTracker extends EventEmitter {
     client: Client;
     invites: Map<string, Collection<string, number>>;

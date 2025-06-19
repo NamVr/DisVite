@@ -1,6 +1,6 @@
 {
 	"name": "disvite",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "An advanced discord tracking module with native mongoose support.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
