@@ -28,6 +28,23 @@ export enum JoinType {
 }
 
 /**
+ * Interface representing the options for the InviteTracker initialization.
+ */
+export interface InviteTrackerOptions {
+	/**
+	 * A optional name for the mongo model.
+	 * If not provided, the default name "inviteSchema" will be used.
+	 */
+	modelName?: string;
+
+	/**
+	 * Set it to true to enable verbose logging.
+	 * This is useful for development and debugging purposes.
+	 */
+	verbose?: boolean;
+}
+
+/**
  * Interface representing the information about an invite.
  */
 export interface InviteInfo {

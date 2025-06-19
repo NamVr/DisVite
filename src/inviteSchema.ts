@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 import { InviteSchema } from "./types";
 
 /**
@@ -82,4 +82,8 @@ const InviteSchema: Schema = new Schema({
 	},
 });
 
-export default mongoose.model<InviteSchema>("inviteSchema", InviteSchema);
+export function getInviteModel(
+	modelName: string = "inviteSchema"
+): Model<InviteSchema & Document> {
+	return mongoose.model<InviteSchema & Document>(modelName, InviteSchema);
+}
