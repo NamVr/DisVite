@@ -229,7 +229,7 @@ Please open an issue for bugs, feature requests, or questions.
 
 ## License
 
-ISC
+GPL-3.0: See [LICENSE](/LICENSE) for more info.
 
 ---
 
