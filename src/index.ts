@@ -37,18 +37,15 @@ export class InviteTracker extends EventEmitter {
 		try {
 			await mongoose.connect(mongoURI);
 			if (this.options?.verbose)
-				console.info("Discord Invite Tracker: Connected to MongoDB");
+				console.info("DisVite: Connected to MongoDB");
 		} catch (error) {
 			if (this.options?.verbose)
-				console.error(
-					"Discord Invite Tracker: Failed to connect to MongoDB\n",
-					error
-				);
+				console.error("DisVite: Failed to connect to MongoDB\n", error);
 
 			if (attempt < 3) {
 				if (this.options?.verbose)
 					console.warn(
-						`Discord Invite Tracker: Retrying to connect to MongoDB (Attempt ${
+						`DisVite: Retrying to connect to MongoDB (Attempt ${
 							attempt + 1
 						})`
 					);
@@ -56,11 +53,9 @@ export class InviteTracker extends EventEmitter {
 				await this.connectToDatabase(mongoURI, attempt + 1);
 			} else {
 				console.error(
-					"Discord Invite Tracker: Failed to connect to MongoDB after 3 attempts"
+					"DisVite: Failed to connect to MongoDB after 3 attempts"
 				);
-				throw new Error(
-					"Discord Invite Tracker: MongoDB connection impossible."
-				);
+				throw new Error("DisVite: MongoDB connection impossible.");
 			}
 		}
 	}
@@ -69,9 +64,7 @@ export class InviteTracker extends EventEmitter {
 		this.client.once("ready", () => {
 			this.cacheGuildInvites();
 			if (this.options?.verbose)
-				console.info(
-					`Discord Invite Tracker: Logged in as ${this.client.user?.tag}`
-				);
+				console.info(`DisVite: Logged in as ${this.client.user?.tag}`);
 		});
 
 		this.client.on("guildMemberAdd", (member) => this.inviteJoin(member));
@@ -109,7 +102,7 @@ export class InviteTracker extends EventEmitter {
 				} catch (err) {
 					if (this.options?.verbose)
 						console.warn(
-							`Discord Invite Tracker: Failed to fetch vanity data for guild ${guild.id}`
+							`DisVite: Failed to fetch vanity data for guild ${guild.id}`
 						);
 				}
 			}
@@ -117,7 +110,7 @@ export class InviteTracker extends EventEmitter {
 		} catch (error) {
 			if (this.options?.verbose)
 				console.error(
-					`Discord Invite Tracker: Failed to fetch invites for guild ${guild.id}\n`,
+					`DisVite: Failed to fetch invites for guild ${guild.id}\n`,
 					error
 				);
 
@@ -125,7 +118,7 @@ export class InviteTracker extends EventEmitter {
 				// Retry fetching invites if it fails, up to 3 attempts.
 				if (this.options?.verbose)
 					console.warn(
-						`Discord Invite Tracker: Retrying to fetch invites for guild ${
+						`DisVite: Retrying to fetch invites for guild ${
 							guild.id
 						} (Attempt ${attempt + 1})`
 					);
@@ -134,7 +127,7 @@ export class InviteTracker extends EventEmitter {
 			} else {
 				if (this.options?.verbose)
 					console.error(
-						`Discord Invite Tracker: Failed to fetch invites for guild ${guild.id} after 3 attempts`
+						`DisVite: Failed to fetch invites for guild ${guild.id} after 3 attempts`
 					);
 			}
 		}
@@ -201,7 +194,7 @@ export class InviteTracker extends EventEmitter {
 			} catch (err) {
 				if (this.options?.verbose)
 					console.warn(
-						`Discord Invite Tracker: Failed to fetch vanity data for guild ${guild.id}`
+						`DisVite: Failed to fetch vanity data for guild ${guild.id}`
 					);
 			}
 		}
@@ -221,7 +214,7 @@ export class InviteTracker extends EventEmitter {
 		await inviteData.save().catch((error) => {
 			if (this.options?.verbose)
 				console.error(
-					`Discord Invite Tracker: Failed to save invite data for ${member.id} in guild ${guild.id}\n`,
+					`DisVite: Failed to save invite data for ${member.id} in guild ${guild.id}\n`,
 					error
 				);
 		});
@@ -276,7 +269,7 @@ export class InviteTracker extends EventEmitter {
 			await joinRecord.save().catch((error) => {
 				if (this.options?.verbose)
 					console.error(
-						`Discord Invite Tracker: Failed to update leftAt for ${member.id} in guild ${member.guild.id}\n`,
+						`DisVite: Failed to update leftAt for ${member.id} in guild ${member.guild.id}\n`,
 						error
 					);
 			});

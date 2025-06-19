@@ -1,9 +1,9 @@
-# discord-invite-tracker
+# DisVite
 
 > An advanced Discord invite tracking module with native Mongoose support for Discord.js bots.
 
-[![npm version](https://img.shields.io/npm/v/discord-invite-tracker.svg)](https://npmjs.com/package/discord-invite-tracker)
-[![license](https://img.shields.io/npm/l/discord-invite-tracker.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/disvite.svg)](https://npmjs.com/package/disvite)
+[![license](https://img.shields.io/npm/l/disvite.svg)](LICENSE)
 
 ---
 
@@ -36,7 +36,7 @@
 ## Installation
 
 ```sh
-npm install discord-invite-tracker
+npm install disvite
 ```
 
 ---
@@ -55,7 +55,7 @@ npm install discord-invite-tracker
 
 ```typescript
 import { Client, GatewayIntentBits } from "discord.js";
-import { InviteTracker } from "discord-invite-tracker";
+import { InviteTracker } from "disvite";
 
 const client = new Client({
 	intents: [
@@ -85,7 +85,7 @@ client.login("YOUR_BOT_TOKEN");
 
 ```javascript
 const { Client, GatewayIntentBits } = require("discord.js");
-const { InviteTracker } = require("discord-invite-tracker");
+const { InviteTracker } = require("disvite");
 
 const client = new Client({
 	intents: [
@@ -101,7 +101,7 @@ const tracker = new InviteTracker(client, "mongodb://localhost:27017/mydb", {
 
 /**
  * @param {import('discord.js').GuildMember} member
- * @param {import('discord-invite-tracker').InviteTrackerTypes.InviteInfo} info
+ * @param {import('disvite').InviteTrackerTypes.InviteInfo} info
  */
 tracker.on("inviteJoin", (member, info) => {
 	console.log(`${member.user.tag} joined via:`, info);
@@ -140,7 +140,7 @@ Pass these as the third argument to the `InviteTracker` constructor.
 All types are exported as a namespace:
 
 ```typescript
-import { InviteTrackerTypes } from "discord-invite-tracker";
+import { InviteTrackerTypes } from "disvite";
 
 // Example:
 const info: InviteTrackerTypes.InviteInfo = { ... };
@@ -152,7 +152,7 @@ Reference types for IntelliSense:
 
 ```javascript
 /**
- * @param {import('discord-invite-tracker').InviteTrackerTypes.InviteInfo} info
+ * @param {import('disvite').InviteTrackerTypes.InviteInfo} info
  */
 function handleInvite(info) { ... }
 ```
@@ -161,7 +161,7 @@ Or define a global typedef:
 
 ```javascript
 /**
- * @typedef {import('discord-invite-tracker').InviteTrackerTypes.InviteInfo} InviteInfo
+ * @typedef {import('disvite').InviteTrackerTypes.InviteInfo} InviteInfo
  */
 ```
 
@@ -210,7 +210,7 @@ class MyTracker extends InviteTracker {
 A: Ensure your bot has the `GUILD_MEMBERS` and `GUILD_INVITES` intents enabled and the correct permissions.
 
 **Q: How do I use the types in JavaScript?**  
-A: Use JSDoc with `import('discord-invite-tracker').InviteTrackerTypes.InviteInfo`.
+A: Use JSDoc with `import('disvite').InviteTrackerTypes.InviteInfo`.
 
 **Q: How do I change the MongoDB model name?**  
 A: Pass `modelName: "yourModelName"` in the options object.
@@ -235,8 +235,8 @@ ISC
 
 ## Changelog
 
-See [Releases](https://github.com/NamVr/discord-invite-tracker/releases) for version history.
+See [Releases](https://github.com/NamVr/disvite/releases) for version history.
 
 ---
 
-**Enjoy using `discord-invite-tracker`!**
+**Enjoy using `DisVite`!**

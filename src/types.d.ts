@@ -1,5 +1,5 @@
 /**
- * @file Types used in discord-invite-tracker.
+ * @file Types used in DisVite.
  * @author Naman Vrati
  * @version 1.0.0
  */
