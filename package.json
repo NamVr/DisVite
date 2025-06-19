@@ -1,17 +1,25 @@
 {
 	"name": "disvite",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "An advanced discord tracking module with native mongoose support.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc && cpx \"src/types.d.ts\" dist/",
 		"prepublishOnly": "npm run build",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"files": [
 		"dist"
 	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/NamVr/DisVite.git"
+	},
+	"homepage": "https://github.com/NamVr/DisVite",
+	"bugs": {
+		"url": "https://github.com/NamVr/DisVite/issues"
+	},
 	"keywords": [
 		"discord",
 		"invite",
@@ -25,12 +33,13 @@
 		"mongo-db"
 	],
 	"author": "Naman Vrati",
-	"license": "ISC",
+	"license": "GPL-3.0",
 	"dependencies": {
 		"discord.js": "^14.x.x",
 		"mongoose": "^8.x.x"
 	},
 	"devDependencies": {
+		"cpx": "^1.5.0",
 		"typescript": "^5.x.x"
 	}
 }
