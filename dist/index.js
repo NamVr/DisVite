@@ -41,29 +41,37 @@ const events_1 = require("events");
 const mongoose_1 = __importDefault(require("mongoose"));
 const discord_js_1 = require("discord.js");
 const Types = __importStar(require("./types"));
-const inviteSchema_1 = __importDefault(require("./inviteSchema"));
+const inviteSchema_1 = require("./inviteSchema");
 // Export types and schema for external use.
 exports.InviteTrackerTypes = __importStar(require("./types"));
 exports.InviteTrackerSchema = __importStar(require("./inviteSchema"));
 class InviteTracker extends events_1.EventEmitter {
-    // TODO: Add verbose option to the constructor to enable/disable verbose logging.
     // TODO: Add queue system to handle invite tracking in case of high traffic.
-    constructor(client, mongoURI) {
+    constructor(client, mongoURI, options) {
         super();
         this.invites = new Map();
         this.client = client;
+        this.options = {
+            modelName: "inviteSchema",
+            verbose: false,
+            ...options,
+        };
+        this.inviteModel = (0, inviteSchema_1.getInviteModel)(options?.modelName);
         this.connectToDatabase(mongoURI);
         this.initialize();
     }
     async connectToDatabase(mongoURI, attempt = 1) {
         try {
             await mongoose_1.default.connect(mongoURI);
-            console.info("Discord Invite Tracker: Connected to MongoDB");
+            if (this.options?.verbose)
+                console.info("Discord Invite Tracker: Connected to MongoDB");
         }
         catch (error) {
-            console.error("Discord Invite Tracker: Failed to connect to MongoDB\n", error);
+            if (this.options?.verbose)
+                console.error("Discord Invite Tracker: Failed to connect to MongoDB\n", error);
             if (attempt < 3) {
-                console.warn(`Discord Invite Tracker: Retrying to connect to MongoDB (Attempt ${attempt + 1})`);
+                if (this.options?.verbose)
+                    console.warn(`Discord Invite Tracker: Retrying to connect to MongoDB (Attempt ${attempt + 1})`);
                 await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retrying
                 await this.connectToDatabase(mongoURI, attempt + 1);
             }
@@ -76,7 +84,8 @@ class InviteTracker extends events_1.EventEmitter {
     initialize() {
         this.client.once("ready", () => {
             this.cacheGuildInvites();
-            console.info(`Discord Invite Tracker: Logged in as ${this.client.user?.tag}`);
+            if (this.options?.verbose)
+                console.info(`Discord Invite Tracker: Logged in as ${this.client.user?.tag}`);
         });
         this.client.on("guildMemberAdd", (member) => this.inviteJoin(member));
         this.client.on("guildMemberRemove", (member) => this.inviteLeave(member));
@@ -107,21 +116,25 @@ class InviteTracker extends events_1.EventEmitter {
                     inviteCollection.set("VANITY", vanityData.uses || 0);
                 }
                 catch (err) {
-                    console.warn(`Discord Invite Tracker: Failed to fetch vanity data for guild ${guild.id}`);
+                    if (this.options?.verbose)
+                        console.warn(`Discord Invite Tracker: Failed to fetch vanity data for guild ${guild.id}`);
                 }
             }
             this.invites.set(guild.id, inviteCollection);
         }
         catch (error) {
-            console.error(`Discord Invite Tracker: Failed to fetch invites for guild ${guild.id}\n`, error);
+            if (this.options?.verbose)
+                console.error(`Discord Invite Tracker: Failed to fetch invites for guild ${guild.id}\n`, error);
             if (attempt < 3) {
                 // Retry fetching invites if it fails, up to 3 attempts.
-                console.warn(`Discord Invite Tracker: Retrying to fetch invites for guild ${guild.id} (Attempt ${attempt + 1})`);
+                if (this.options?.verbose)
+                    console.warn(`Discord Invite Tracker: Retrying to fetch invites for guild ${guild.id} (Attempt ${attempt + 1})`);
                 await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retrying
                 await this.cacheGuildInvitesForGuild(guild, attempt + 1);
             }
             else {
-                console.error(`Discord Invite Tracker: Failed to fetch invites for guild ${guild.id} after 3 attempts`);
+                if (this.options?.verbose)
+                    console.error(`Discord Invite Tracker: Failed to fetch invites for guild ${guild.id} after 3 attempts`);
             }
         }
     }
@@ -176,12 +189,13 @@ class InviteTracker extends events_1.EventEmitter {
                 cachedInvites.set("VANITY", latestVanityData.uses || 0);
             }
             catch (err) {
-                console.warn(`Discord Invite Tracker: Failed to fetch vanity data for guild ${guild.id}`);
+                if (this.options?.verbose)
+                    console.warn(`Discord Invite Tracker: Failed to fetch vanity data for guild ${guild.id}`);
             }
         }
         //cachedInvites.set("VANITY", newVanityUses);
         // 4. Save to Database.
-        const inviteData = new inviteSchema_1.default({
+        const inviteData = new this.inviteModel({
             guildId: guild.id,
             inviteeId: member.id,
             inviterId: inviteInfo.inviterId || null,
@@ -191,7 +205,8 @@ class InviteTracker extends events_1.EventEmitter {
             leftAt: null, // Set to null initially
         });
         await inviteData.save().catch((error) => {
-            console.error(`Discord Invite Tracker: Failed to save invite data for ${member.id} in guild ${guild.id}\n`, error);
+            if (this.options?.verbose)
+                console.error(`Discord Invite Tracker: Failed to save invite data for ${member.id} in guild ${guild.id}\n`, error);
         });
         // 5. Emit an event with the invite info.
         this.client.emit("inviteJoin", member, inviteInfo);
@@ -204,11 +219,13 @@ class InviteTracker extends events_1.EventEmitter {
             return true;
         }
         // Check if account has re-joined the guild multiple times using leftAt.
-        const recentInvites = await inviteSchema_1.default.find({
+        const recentInvites = await this.inviteModel
+            .find({
             guildId: member.guild.id,
             inviteeId: member.id,
             leftAt: { $ne: null },
-        }).sort({ leftAt: -1 });
+        })
+            .sort({ leftAt: -1 });
         // If the user has left and re-joined the guild multiple times, compare his last leftAt.
         if (recentInvites.length > 0) {
             const lastLeftAt = recentInvites[0].leftAt;
@@ -222,15 +239,18 @@ class InviteTracker extends events_1.EventEmitter {
     }
     async inviteLeave(member) {
         // Find the latest join record to update leftAt.
-        const joinRecord = await inviteSchema_1.default.findOne({
+        const joinRecord = await this.inviteModel
+            .findOne({
             guildId: member.guild.id,
             inviteeId: member.id,
             leftAt: null, // Only update the latest join record
-        }).sort({ joinedAt: -1 });
+        })
+            .sort({ joinedAt: -1 });
         if (joinRecord) {
             joinRecord.leftAt = new Date(); // Set the leftAt timestamp.
             await joinRecord.save().catch((error) => {
-                console.error(`Discord Invite Tracker: Failed to update leftAt for ${member.id} in guild ${member.guild.id}\n`, error);
+                if (this.options?.verbose)
+                    console.error(`Discord Invite Tracker: Failed to update leftAt for ${member.id} in guild ${member.guild.id}\n`, error);
             });
         }
         // Finally emit the custom leave event.

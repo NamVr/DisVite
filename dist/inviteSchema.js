@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getInviteModel = getInviteModel;
 const mongoose_1 = __importStar(require("mongoose"));
 /**
  * Interface representing the schema for an invite in the database.
@@ -107,4 +108,6 @@ const InviteSchema = new mongoose_1.Schema({
         default: false,
     },
 });
-exports.default = mongoose_1.default.model("inviteSchema", InviteSchema);
+function getInviteModel(modelName = "inviteSchema") {
+    return mongoose_1.default.model(modelName, InviteSchema);
+}
