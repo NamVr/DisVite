@@ -1,11 +1,11 @@
 {
 	"name": "disvite",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"description": "An advanced discord tracking module with native mongoose support.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
-		"build": "tsc && cpx \"src/types.d.ts\" dist/",
+		"build": "tsc",
 		"prepublishOnly": "npm run build",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
