@@ -42,6 +42,37 @@ export interface InviteTrackerOptions {
 	 * This is useful for development and debugging purposes.
 	 */
 	verbose?: boolean;
+
+	/**
+	 * A custom cache store implementation.
+	 * If not provided, InMemoryCacheStore will be used.
+	 */
+	cacheStore?: CacheStore;
+}
+
+/**
+ * Interface representing a generic store for caching guild invite use counts.
+ */
+export interface CacheStore {
+	/**
+	 * Retrieve cached invites mapping (invite code -> use count) for a guild.
+	 */
+	get(guildId: string): Promise<Map<string, number> | undefined> | Map<string, number> | undefined;
+
+	/**
+	 * Store invites mapping for a guild.
+	 */
+	set(guildId: string, invites: Map<string, number>): Promise<void> | void;
+
+	/**
+	 * Remove a guild's invites from the cache.
+	 */
+	delete(guildId: string): Promise<void> | void;
+
+	/**
+	 * Clear all cached invites across all guilds.
+	 */
+	clear(): Promise<void> | void;
 }
 
 /**

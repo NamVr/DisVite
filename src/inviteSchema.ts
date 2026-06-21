@@ -85,5 +85,8 @@ const InviteSchema: Schema = new Schema({
 export function getInviteModel(
 	modelName: string = "inviteSchema"
 ): Model<InviteSchema & Document> {
-	return mongoose.model<InviteSchema & Document>(modelName, InviteSchema);
+	return (
+		(mongoose.models[modelName] as Model<InviteSchema & Document>) ||
+		mongoose.model<InviteSchema & Document>(modelName, InviteSchema)
+	);
 }
