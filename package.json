@@ -13,11 +13,21 @@
 	"files": [
 		"dist"
 	],
+	"engines": {
+		"node": ">=20"
+	},
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/NamVr/DisVite.git"
 	},
-	"homepage": "https://github.com/NamVr/DisVite",
+	"homepage": "https://disvite.namanvrati.me",
 	"bugs": {
 		"url": "https://github.com/NamVr/DisVite/issues"
 	},
@@ -31,7 +41,11 @@
 		"discord-invite",
 		"discord-bot",
 		"discord-invite-manager",
-		"mongo-db"
+		"mongodb",
+		"discord.js",
+		"discordjs",
+		"invite-tracker",
+		"analytics"
 	],
 	"author": "Naman Vrati",
 	"license": "GPL-3.0",
