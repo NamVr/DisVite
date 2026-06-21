@@ -1,11 +1,12 @@
 import { EventEmitter } from "events";
 import { Model, Document } from "mongoose";
-import { Client, Collection, GuildMember, Guild } from "discord.js";
+import { Client, GuildMember, Guild } from "discord.js";
 import * as Types from "./types";
 export * from "./types";
+export { InMemoryCacheStore } from "./cacheStore";
 export declare class InviteTracker extends EventEmitter {
     client: Client;
-    invites: Map<string, Collection<string, number>>;
+    invites: Types.CacheStore;
     protected inviteModel: Model<Types.InviteSchema & Document>;
     protected options: Types.InviteTrackerOptions | undefined;
     constructor(client: Client, mongoURI: string, options?: Types.InviteTrackerOptions);

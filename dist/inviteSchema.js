@@ -109,5 +109,6 @@ const InviteSchema = new mongoose_1.Schema({
     },
 });
 function getInviteModel(modelName = "inviteSchema") {
-    return mongoose_1.default.model(modelName, InviteSchema);
+    return (mongoose_1.default.models[modelName] ||
+        mongoose_1.default.model(modelName, InviteSchema));
 }

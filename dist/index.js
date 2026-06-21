@@ -39,27 +39,32 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InviteTracker = void 0;
+exports.InviteTracker = exports.InMemoryCacheStore = void 0;
 const events_1 = require("events");
 const mongoose_1 = __importDefault(require("mongoose"));
 const discord_js_1 = require("discord.js");
 const Types = __importStar(require("./types"));
 const inviteSchema_1 = require("./inviteSchema");
+const cacheStore_1 = require("./cacheStore");
 // Export types and schema for external use.
 __exportStar(require("./types"), exports);
+var cacheStore_2 = require("./cacheStore");
+Object.defineProperty(exports, "InMemoryCacheStore", { enumerable: true, get: function () { return cacheStore_2.InMemoryCacheStore; } });
 class InviteTracker extends events_1.EventEmitter {
     // TODO: Add queue system to handle invite tracking in case of high traffic.
     constructor(client, mongoURI, options) {
         super();
-        this.invites = new Map();
         this.client = client;
         this.options = {
             modelName: "inviteSchema",
             verbose: false,
             ...options,
         };
+        this.invites = this.options.cacheStore || new cacheStore_1.InMemoryCacheStore();
         this.inviteModel = (0, inviteSchema_1.getInviteModel)(options?.modelName);
-        this.connectToDatabase(mongoURI);
+        this.connectToDatabase(mongoURI).catch((error) => {
+            this.emit("error", error);
+        });
         this.initialize();
     }
     async connectToDatabase(mongoURI, attempt = 1) {
@@ -102,27 +107,38 @@ class InviteTracker extends events_1.EventEmitter {
                 this.cacheGuildInvitesForGuild(invite.guild);
             }
         });
+        // Cache invites on dynamic guild join to prevent tracking failures.
+        this.client.on("guildCreate", (guild) => {
+            this.cacheGuildInvitesForGuild(guild);
+        });
+        // Evict invites on guild leave to prevent memory leaks.
+        this.client.on("guildDelete", (guild) => {
+            Promise.resolve(this.invites.delete(guild.id)).catch((error) => {
+                if (this.options?.verbose)
+                    console.error(`DisVite: Failed to evict cache for guild ${guild.id}\n`, error);
+            });
+        });
     }
     // Cache invites for a single guild, including vanity.
     async cacheGuildInvitesForGuild(guild, attempt = 1) {
         try {
             const fetchedInvites = await guild.invites.fetch();
-            const inviteCollection = new discord_js_1.Collection();
+            const inviteMap = new Map();
             fetchedInvites.forEach((invite) => {
-                inviteCollection.set(invite.code, invite.uses || 0);
+                inviteMap.set(invite.code, invite.uses || 0);
             });
             // Handle vanity URL for tier 3 servers.
             if (guild.vanityURLCode) {
                 try {
                     const vanityData = await guild.fetchVanityData();
-                    inviteCollection.set("VANITY", vanityData.uses || 0);
+                    inviteMap.set("VANITY", vanityData.uses || 0);
                 }
                 catch (err) {
                     if (this.options?.verbose)
                         console.warn(`DisVite: Failed to fetch vanity data for guild ${guild.id}`);
                 }
             }
-            this.invites.set(guild.id, inviteCollection);
+            await this.invites.set(guild.id, inviteMap);
         }
         catch (error) {
             if (this.options?.verbose)
@@ -141,13 +157,16 @@ class InviteTracker extends events_1.EventEmitter {
         }
     }
     async cacheGuildInvites() {
-        for (const guild of this.client.guilds.cache.values()) {
-            await this.cacheGuildInvitesForGuild(guild);
+        const guilds = Array.from(this.client.guilds.cache.values());
+        const concurrencyLimit = 3;
+        for (let i = 0; i < guilds.length; i += concurrencyLimit) {
+            const chunk = guilds.slice(i, i + concurrencyLimit);
+            await Promise.all(chunk.map((guild) => this.cacheGuildInvitesForGuild(guild)));
         }
     }
     async inviteJoin(member) {
         const { guild } = member;
-        const cachedInvites = this.invites.get(guild.id);
+        const cachedInvites = await this.invites.get(guild.id);
         // InviteInfo Object for output.
         const inviteInfo = {
             joinType: Types.JoinType.Unknown, // Default to unknown
@@ -189,6 +208,7 @@ class InviteTracker extends events_1.EventEmitter {
             try {
                 const latestVanityData = await guild.fetchVanityData();
                 cachedInvites.set("VANITY", latestVanityData.uses || 0);
+                await this.invites.set(guild.id, cachedInvites);
             }
             catch (err) {
                 if (this.options?.verbose)
