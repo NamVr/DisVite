@@ -37,11 +37,11 @@
 	"license": "GPL-3.0",
 	"dependencies": {
 		"discord.js": "^14.x.x",
-		"mongoose": "^8.x.x"
+		"mongoose": "^9.x.x"
 	},
 	"devDependencies": {
 		"cpx": "^1.5.0",
-		"typedoc": "^0.26.0",
-		"typescript": "^5.x.x"
+		"typedoc": "^0.28.19",
+		"typescript": "^6.x.x"
 	}
 }
