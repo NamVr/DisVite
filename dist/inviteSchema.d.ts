@@ -1,8 +1,26 @@
-import { Schema, Document, Model } from "mongoose";
+import { Schema, Document, Model, Connection } from "mongoose";
 import { InviteSchema } from "./types";
 /**
- * Interface representing the schema for an invite in the database.
+ * Interface for bonus invite records in MongoDB.
  */
-declare const InviteSchema: Schema;
-export declare function getInviteModel(modelName?: string): Model<InviteSchema & Document>;
-export {};
+export interface BonusInviteDocument extends Document {
+    guildId: string;
+    userId: string;
+    bonus: number;
+}
+/**
+ * Schema for member invite records in MongoDB.
+ */
+export declare const InviteMongooseSchema: Schema;
+/**
+ * Schema for manual bonus / penalty invite counts.
+ */
+export declare const BonusMongooseSchema: Schema;
+/**
+ * Safely retrieve or compile the Mongoose model for invites, preventing OverwriteModelError.
+ */
+export declare function getInviteModel(modelName?: string, connection?: Connection): Model<InviteSchema & Document>;
+/**
+ * Safely retrieve or compile the Mongoose model for bonus invites.
+ */
+export declare function getBonusInviteModel(modelName?: string, connection?: Connection): Model<BonusInviteDocument>;

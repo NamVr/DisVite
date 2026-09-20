@@ -1,22 +1,33 @@
 {
 	"name": "disvite",
-	"version": "1.0.6",
-	"description": "An advanced discord tracking module with native mongoose support.",
+	"version": "2.0.0",
+	"description": "The ultimate Discord invite tracking and analytics engine for Discord.js bots with pluggable storage, join storm protection, and zero dependencies.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
 		"build": "tsc",
-		"prepublishOnly": "npm run build",
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"prepublishOnly": "npm run build && npm test",
+		"test": "node --test test/*.test.js",
+		"docs": "typedoc --entryPoints src/index.ts --out docs"
 	},
 	"files": [
 		"dist"
 	],
+	"engines": {
+		"node": ">=20"
+	},
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/NamVr/DisVite.git"
 	},
-	"homepage": "https://github.com/NamVr/DisVite",
+	"homepage": "https://disvite.namanvrati.me",
 	"bugs": {
 		"url": "https://github.com/NamVr/DisVite/issues"
 	},
@@ -30,16 +41,32 @@
 		"discord-invite",
 		"discord-bot",
 		"discord-invite-manager",
-		"mongo-db"
+		"mongodb",
+		"discord.js",
+		"discordjs",
+		"invite-tracker",
+		"analytics",
+		"leaderboard",
+		"bonus-invites"
 	],
 	"author": "Naman Vrati",
 	"license": "GPL-3.0",
+	"peerDependencies": {
+		"discord.js": "^14.0.0",
+		"mongoose": ">=8.0.0"
+	},
+	"peerDependenciesMeta": {
+		"mongoose": {
+			"optional": true
+		}
+	},
 	"dependencies": {
 		"discord.js": "^14.x.x",
-		"mongoose": "^8.x.x"
+		"mongoose": "^9.x.x"
 	},
 	"devDependencies": {
 		"cpx": "^1.5.0",
-		"typescript": "^5.x.x"
+		"typedoc": "^0.28.19",
+		"typescript": "^6.x.x"
 	}
 }

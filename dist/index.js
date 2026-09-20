@@ -35,228 +35,573 @@ var __importStar = (this && this.__importStar) || (function () {
 var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InviteTracker = void 0;
+exports.InviteTracker = exports.getBonusInviteModel = exports.getInviteModel = exports.MongooseStorageAdapter = exports.MemoryStorageAdapter = exports.GuildTaskQueue = exports.InMemoryCacheStore = void 0;
 const events_1 = require("events");
-const mongoose_1 = __importDefault(require("mongoose"));
 const discord_js_1 = require("discord.js");
 const Types = __importStar(require("./types"));
-const inviteSchema_1 = require("./inviteSchema");
-// Export types and schema for external use.
+const cacheStore_1 = require("./cacheStore");
+const queue_1 = require("./queue");
+const storage_1 = require("./storage");
+// Re-export public types, schemas, and classes
 __exportStar(require("./types"), exports);
+var cacheStore_2 = require("./cacheStore");
+Object.defineProperty(exports, "InMemoryCacheStore", { enumerable: true, get: function () { return cacheStore_2.InMemoryCacheStore; } });
+var queue_2 = require("./queue");
+Object.defineProperty(exports, "GuildTaskQueue", { enumerable: true, get: function () { return queue_2.GuildTaskQueue; } });
+var storage_2 = require("./storage");
+Object.defineProperty(exports, "MemoryStorageAdapter", { enumerable: true, get: function () { return storage_2.MemoryStorageAdapter; } });
+Object.defineProperty(exports, "MongooseStorageAdapter", { enumerable: true, get: function () { return storage_2.MongooseStorageAdapter; } });
+var inviteSchema_1 = require("./inviteSchema");
+Object.defineProperty(exports, "getInviteModel", { enumerable: true, get: function () { return inviteSchema_1.getInviteModel; } });
+Object.defineProperty(exports, "getBonusInviteModel", { enumerable: true, get: function () { return inviteSchema_1.getBonusInviteModel; } });
+/**
+ * High-performance, production-ready Discord invite tracking engine.
+ */
 class InviteTracker extends events_1.EventEmitter {
-    // TODO: Add queue system to handle invite tracking in case of high traffic.
-    constructor(client, mongoURI, options) {
+    /**
+     * Creates an instance of InviteTracker.
+     *
+     * @param client The discord.js Client instance.
+     * @param mongoURIOrOptions Either a MongoDB URI string (legacy) or InviteTrackerOptions.
+     * @param options Optional InviteTrackerOptions when mongoURI is provided as 2nd argument.
+     */
+    constructor(client, mongoURIOrOptions, options) {
         super();
-        this.invites = new Map();
+        this.boundHandlers = {};
+        this.isDestroyed = false;
         this.client = client;
+        let mergedOptions = {};
+        if (typeof mongoURIOrOptions === "string") {
+            mergedOptions = {
+                mongoURI: mongoURIOrOptions,
+                storage: "mongoose",
+                ...options,
+            };
+        }
+        else if (mongoURIOrOptions && typeof mongoURIOrOptions === "object") {
+            mergedOptions = { ...mongoURIOrOptions };
+        }
         this.options = {
-            modelName: "inviteSchema",
-            verbose: false,
-            ...options,
+            modelName: mergedOptions.modelName || "inviteSchema",
+            bonusModelName: mergedOptions.bonusModelName || "bonusInviteSchema",
+            verbose: mergedOptions.verbose ?? false,
+            fakeThresholdMs: mergedOptions.fakeThresholdMs ?? 7 * 24 * 60 * 60 * 1000,
+            rejoinThresholdMs: mergedOptions.rejoinThresholdMs ?? 7 * 24 * 60 * 60 * 1000,
+            emitOnClient: mergedOptions.emitOnClient ?? true,
+            concurrency: mergedOptions.concurrency ?? 3,
+            trackBots: mergedOptions.trackBots ?? true,
+            storage: mergedOptions.storage,
+            mongoURI: mergedOptions.mongoURI,
+            mongooseConnection: mergedOptions.mongooseConnection,
+            cacheStore: mergedOptions.cacheStore,
         };
-        this.inviteModel = (0, inviteSchema_1.getInviteModel)(options?.modelName);
-        this.connectToDatabase(mongoURI);
-        this.initialize();
+        this.invites = mergedOptions.cacheStore || new cacheStore_1.InMemoryCacheStore();
+        this.queue = new queue_1.GuildTaskQueue();
+        // Configure Storage Adapter
+        if (mergedOptions.storage &&
+            typeof mergedOptions.storage === "object" &&
+            "recordJoin" in mergedOptions.storage) {
+            this.storage = mergedOptions.storage;
+        }
+        else if (mergedOptions.storage === "mongoose" ||
+            mergedOptions.mongoURI ||
+            mergedOptions.mongooseConnection) {
+            this.storage = new storage_1.MongooseStorageAdapter({
+                mongoURI: mergedOptions.mongoURI,
+                connection: mergedOptions.mongooseConnection,
+                modelName: this.options.modelName,
+                bonusModelName: this.options.bonusModelName,
+                onError: (err) => this.emitSafeError(err),
+                onDebug: (msg) => this.emitSafeDebug(msg),
+            });
+        }
+        else {
+            this.storage = new storage_1.MemoryStorageAdapter();
+        }
+        // Initialize storage asynchronously without unhandled promise rejections
+        if (this.storage.init) {
+            this.storage.init().catch((err) => {
+                this.emitSafeError(err);
+            });
+        }
+        this.registerGatewayListeners();
     }
-    async connectToDatabase(mongoURI, attempt = 1) {
+    // ==========================================
+    // Strongly Typed EventEmitter Overrides
+    // ==========================================
+    on(event, listener) {
+        return super.on(event, listener);
+    }
+    once(event, listener) {
+        return super.once(event, listener);
+    }
+    emit(event, ...args) {
+        return super.emit(event, ...args);
+    }
+    off(event, listener) {
+        return super.off(event, listener);
+    }
+    // ==========================================
+    // Safe Internal Event Dispatchers (Zero Console Logs)
+    // ==========================================
+    emitSafeDebug(message) {
+        if (this.options.verbose) {
+            this.emit("debug", message);
+        }
+    }
+    emitSafeWarn(message) {
+        this.emit("warn", message);
+    }
+    emitSafeError(error) {
+        if (this.listenerCount("error") > 0) {
+            this.emit("error", error);
+        }
+    }
+    // ==========================================
+    // Gateway Initialization & Intent Validation
+    // ==========================================
+    validateGatewayIntents() {
+        const clientIntents = this.client.options?.intents;
+        if (!clientIntents)
+            return;
         try {
-            await mongoose_1.default.connect(mongoURI);
-            if (this.options?.verbose)
-                console.info("DisVite: Connected to MongoDB");
+            // Check GuildMembers and GuildInvites bits
+            const membersBit = discord_js_1.GatewayIntentBits.GuildMembers;
+            const invitesBit = discord_js_1.GatewayIntentBits.GuildInvites;
+            let hasMembers = false;
+            let hasInvites = false;
+            if (typeof clientIntents === "number" || typeof clientIntents === "bigint") {
+                const bitmask = BigInt(clientIntents);
+                hasMembers = (bitmask & BigInt(membersBit)) !== BigInt(0);
+                hasInvites = (bitmask & BigInt(invitesBit)) !== BigInt(0);
+            }
+            else if (Array.isArray(clientIntents)) {
+                hasMembers = clientIntents.includes(membersBit) || clientIntents.includes("GuildMembers");
+                hasInvites = clientIntents.includes(invitesBit) || clientIntents.includes("GuildInvites");
+            }
+            if (!hasMembers) {
+                this.emitSafeWarn("DisVite: GuildMembers gateway intent is missing. Tracking member joins and leaves will fail. Enable GuildMembers in client options and Discord Developer Portal.");
+            }
+            if (!hasInvites) {
+                this.emitSafeWarn("DisVite: GuildInvites gateway intent is missing. Real-time invite tracking requires GuildInvites in client options.");
+            }
         }
-        catch (error) {
-            if (this.options?.verbose)
-                console.error("DisVite: Failed to connect to MongoDB\n", error);
-            if (attempt < 3) {
-                if (this.options?.verbose)
-                    console.warn(`DisVite: Retrying to connect to MongoDB (Attempt ${attempt + 1})`);
-                await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retrying
-                await this.connectToDatabase(mongoURI, attempt + 1);
-            }
-            else {
-                console.error("DisVite: Failed to connect to MongoDB after 3 attempts");
-                throw new Error("DisVite: MongoDB connection impossible.");
-            }
+        catch {
+            // Intent check failed gracefully without throwing
         }
     }
-    initialize() {
-        this.client.once("ready", () => {
-            this.cacheGuildInvites();
-            if (this.options?.verbose)
-                console.info(`DisVite: Logged in as ${this.client.user?.tag}`);
-        });
-        this.client.on("guildMemberAdd", (member) => this.inviteJoin(member));
-        this.client.on("guildMemberRemove", (member) => this.inviteLeave(member));
-        // Cache invites on each invite update.
-        this.client.on("inviteCreate", (invite) => {
-            if (invite.guild && invite.guild instanceof discord_js_1.Guild) {
-                this.cacheGuildInvitesForGuild(invite.guild);
-            }
-        });
-        this.client.on("inviteDelete", (invite) => {
-            if (invite.guild && invite.guild instanceof discord_js_1.Guild) {
-                this.cacheGuildInvitesForGuild(invite.guild);
-            }
-        });
+    registerGatewayListeners() {
+        this.boundHandlers = {
+            ready: () => {
+                this.validateGatewayIntents();
+                this.cacheGuildInvites()
+                    .then(() => {
+                    this.emit("ready");
+                    this.emitSafeDebug(`DisVite: Synced and ready on ${this.client.guilds.cache.size} guilds.`);
+                })
+                    .catch((err) => this.emitSafeError(err));
+            },
+            guildMemberAdd: (member) => {
+                this.inviteJoin(member).catch((err) => this.emitSafeError(err));
+            },
+            guildMemberRemove: (member) => {
+                this.inviteLeave(member).catch((err) => this.emitSafeError(err));
+            },
+            inviteCreate: (invite) => {
+                this.handleInviteCreate(invite);
+            },
+            inviteDelete: (invite) => {
+                this.handleInviteDelete(invite);
+            },
+            guildCreate: (guild) => {
+                this.cacheGuildInvitesForGuild(guild).catch((err) => this.emitSafeError(err));
+            },
+            guildDelete: (guild) => {
+                this.handleGuildDelete(guild);
+            },
+        };
+        if (this.client.isReady()) {
+            this.validateGatewayIntents();
+            this.cacheGuildInvites()
+                .then(() => {
+                this.emit("ready");
+                this.emitSafeDebug(`DisVite: Synced and ready on ${this.client.guilds.cache.size} guilds.`);
+            })
+                .catch((err) => this.emitSafeError(err));
+        }
+        else {
+            this.client.once("ready", this.boundHandlers.ready);
+        }
+        this.client.on("guildMemberAdd", this.boundHandlers.guildMemberAdd);
+        this.client.on("guildMemberRemove", this.boundHandlers.guildMemberRemove);
+        this.client.on("inviteCreate", this.boundHandlers.inviteCreate);
+        this.client.on("inviteDelete", this.boundHandlers.inviteDelete);
+        this.client.on("guildCreate", this.boundHandlers.guildCreate);
+        this.client.on("guildDelete", this.boundHandlers.guildDelete);
     }
-    // Cache invites for a single guild, including vanity.
+    // ==========================================
+    // O(1) Delta Caching for Invite Create/Delete
+    // ==========================================
+    handleInviteCreate(invite) {
+        if (this.isDestroyed || !invite.guild)
+            return;
+        const guildId = invite.guild.id;
+        if (this.invites.setInviteUses) {
+            this.invites.setInviteUses(guildId, invite.code, invite.uses || 0);
+        }
+        else {
+            const current = this.invites.get(guildId);
+            if (current instanceof Map) {
+                current.set(invite.code, invite.uses || 0);
+                this.invites.set(guildId, current);
+            }
+        }
+        this.emit("inviteCreate", invite);
+        this.emitSafeDebug(`DisVite: Added invite ${invite.code} to cache for guild ${guildId} [O(1)].`);
+    }
+    handleInviteDelete(invite) {
+        if (this.isDestroyed || !invite.guild)
+            return;
+        const guildId = invite.guild.id;
+        if (this.invites.deleteInvite) {
+            this.invites.deleteInvite(guildId, invite.code);
+        }
+        else {
+            const current = this.invites.get(guildId);
+            if (current instanceof Map) {
+                current.delete(invite.code);
+                this.invites.set(guildId, current);
+            }
+        }
+        this.emit("inviteDelete", invite);
+        this.emitSafeDebug(`DisVite: Removed invite ${invite.code} from cache for guild ${guildId} [O(1)].`);
+    }
+    handleGuildDelete(guild) {
+        if (this.isDestroyed)
+            return;
+        Promise.resolve(this.invites.delete(guild.id)).catch((err) => this.emitSafeError(err));
+        this.emitSafeDebug(`DisVite: Evicted cache for removed guild ${guild.id}.`);
+    }
+    // ==========================================
+    // Permission-Safe Guild Invites Caching
+    // ==========================================
+    hasManageGuildPermission(guild) {
+        try {
+            const me = guild.members.me;
+            if (!me)
+                return true; // optimistic if me is not cached
+            return me.permissions.has(discord_js_1.PermissionFlagsBits.ManageGuild);
+        }
+        catch {
+            return false;
+        }
+    }
+    /**
+     * Cache all invites for a specific guild safely.
+     */
     async cacheGuildInvitesForGuild(guild, attempt = 1) {
+        if (this.isDestroyed || !guild.available) {
+            return new Map();
+        }
+        // Pre-flight permission check
+        if (!this.hasManageGuildPermission(guild)) {
+            this.emitSafeWarn(`DisVite: Bot lacks ManageGuild permission in guild "${guild.name}" (${guild.id}). Unable to fetch invites.`);
+            return new Map();
+        }
         try {
             const fetchedInvites = await guild.invites.fetch();
-            const inviteCollection = new discord_js_1.Collection();
+            const inviteMap = new Map();
             fetchedInvites.forEach((invite) => {
-                inviteCollection.set(invite.code, invite.uses || 0);
+                inviteMap.set(invite.code, invite.uses || 0);
             });
-            // Handle vanity URL for tier 3 servers.
+            // Single-pass vanity check if server has vanity enabled
             if (guild.vanityURLCode) {
                 try {
                     const vanityData = await guild.fetchVanityData();
-                    inviteCollection.set("VANITY", vanityData.uses || 0);
+                    if (vanityData) {
+                        inviteMap.set("VANITY", vanityData.uses || 0);
+                    }
                 }
-                catch (err) {
-                    if (this.options?.verbose)
-                        console.warn(`DisVite: Failed to fetch vanity data for guild ${guild.id}`);
+                catch {
+                    // Vanity fetch failed gracefully without crashing
                 }
             }
-            this.invites.set(guild.id, inviteCollection);
+            await this.invites.set(guild.id, inviteMap);
+            this.emit("guildSync", guild.id, inviteMap.size);
+            this.emitSafeDebug(`DisVite: Cached ${inviteMap.size} invites for guild ${guild.id}.`);
+            return inviteMap;
         }
         catch (error) {
-            if (this.options?.verbose)
-                console.error(`DisVite: Failed to fetch invites for guild ${guild.id}\n`, error);
             if (attempt < 3) {
-                // Retry fetching invites if it fails, up to 3 attempts.
-                if (this.options?.verbose)
-                    console.warn(`DisVite: Retrying to fetch invites for guild ${guild.id} (Attempt ${attempt + 1})`);
-                await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retrying
-                await this.cacheGuildInvitesForGuild(guild, attempt + 1);
+                this.emitSafeDebug(`DisVite: Retrying invite fetch for guild ${guild.id} (Attempt ${attempt + 1}/3)...`);
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+                return this.cacheGuildInvitesForGuild(guild, attempt + 1);
+            }
+            this.emitSafeWarn(`DisVite: Failed to fetch invites for guild ${guild.id} after 3 attempts: ${error?.message || error}`);
+            return new Map();
+        }
+    }
+    /**
+     * Cache invites for all guilds with throttled concurrency to avoid 429s.
+     */
+    async cacheGuildInvites() {
+        const guilds = Array.from(this.client.guilds.cache.values());
+        const concurrency = this.options.concurrency;
+        for (let i = 0; i < guilds.length; i += concurrency) {
+            const chunk = guilds.slice(i, i + concurrency);
+            await Promise.allSettled(chunk.map((guild) => this.cacheGuildInvitesForGuild(guild)));
+        }
+    }
+    // ==========================================
+    // Serialized Join Reconciliation (Queue-Guarded)
+    // ==========================================
+    async inviteJoin(member) {
+        if (this.isDestroyed)
+            return;
+        const { guild } = member;
+        // Serialize execution per guild to eliminate race conditions during join storms
+        await this.queue.enqueue(guild.id, async () => {
+            // 1. Bot Join Detection (Bots use OAuth2 authorization, not member invites!)
+            if (member.user.bot) {
+                if (!this.options.trackBots)
+                    return;
+                const botInfo = {
+                    joinType: Types.JoinType.Bot,
+                    guildId: guild.id,
+                    inviteeId: member.id,
+                    inviterId: null,
+                    inviteCode: null,
+                    fake: false,
+                    joinedAt: new Date(),
+                };
+                await this.storage.recordJoin(botInfo).catch((err) => this.emitSafeError(err));
+                this.dispatchInviteJoin(member, botInfo);
+                return;
+            }
+            const cachedInvites = await this.invites.get(guild.id);
+            const isFake = await this.detectFakeInvite(member);
+            const inviteInfo = {
+                joinType: Types.JoinType.Unknown,
+                guildId: guild.id,
+                inviteeId: member.id,
+                fake: isFake,
+                joinedAt: new Date(),
+            };
+            // If no cache exists or bot lacks permissions, sync and emit Unknown
+            if (!cachedInvites || !this.hasManageGuildPermission(guild)) {
+                if (!cachedInvites && this.hasManageGuildPermission(guild)) {
+                    await this.cacheGuildInvitesForGuild(guild);
+                }
+                await this.storage.recordJoin(inviteInfo).catch((err) => this.emitSafeError(err));
+                this.dispatchInviteJoin(member, inviteInfo);
+                return;
+            }
+            // 2. Fetch fresh invites for comparison
+            let currentInvites;
+            try {
+                currentInvites = await guild.invites.fetch();
+            }
+            catch (error) {
+                this.emitSafeWarn(`DisVite: Failed to fetch fresh invites during join in ${guild.id}: ${error?.message || error}`);
+                await this.storage.recordJoin(inviteInfo).catch((err) => this.emitSafeError(err));
+                this.dispatchInviteJoin(member, inviteInfo);
+                return;
+            }
+            // 3. Diff current invites against cached invites
+            const usedInvite = currentInvites.find((inv) => (inv.uses || 0) > (cachedInvites.get(inv.code) || 0));
+            // Copy current cache as base to support delta credit smoothing during join storms
+            const newInviteMap = new Map(cachedInvites);
+            // Sync invites whose uses are already equal or lower
+            for (const inv of currentInvites.values()) {
+                const currentUses = inv.uses || 0;
+                const cachedUses = cachedInvites.get(inv.code) || 0;
+                if (currentUses <= cachedUses) {
+                    newInviteMap.set(inv.code, currentUses);
+                }
+            }
+            if (usedInvite) {
+                inviteInfo.inviterId = usedInvite.inviter?.id || null;
+                inviteInfo.inviteCode = usedInvite.code;
+                inviteInfo.joinType =
+                    guild.vanityURLCode && usedInvite.code === guild.vanityURLCode
+                        ? Types.JoinType.Vanity
+                        : Types.JoinType.Normal;
+                // Delta increment: advance cache by 1 so remaining queued joins in this storm
+                // can consume their respective delta credits!
+                const previousCachedUses = cachedInvites.get(usedInvite.code) || 0;
+                newInviteMap.set(usedInvite.code, previousCachedUses + 1);
+            }
+            else if (guild.vanityURLCode) {
+                // 4. Check Vanity URL single-fetch if no regular invite changed
+                const oldVanityUses = cachedInvites.get("VANITY") || 0;
+                try {
+                    const vanityData = await guild.fetchVanityData();
+                    const currentVanityUses = vanityData?.uses || 0;
+                    if (currentVanityUses > oldVanityUses) {
+                        inviteInfo.inviteCode = guild.vanityURLCode;
+                        inviteInfo.joinType = Types.JoinType.Vanity;
+                        newInviteMap.set("VANITY", oldVanityUses + 1);
+                    }
+                    else {
+                        newInviteMap.set("VANITY", currentVanityUses);
+                    }
+                }
+                catch {
+                    // Vanity check failed gracefully
+                }
             }
             else {
-                if (this.options?.verbose)
-                    console.error(`DisVite: Failed to fetch invites for guild ${guild.id} after 3 attempts`);
+                // 5. Check for single-use / max-uses invite that expired and disappeared from currentInvites
+                const currentCodes = new Set(Array.from(currentInvites.values()).map((i) => i.code));
+                for (const [cachedCode] of cachedInvites.entries()) {
+                    if (cachedCode !== "VANITY" && !currentCodes.has(cachedCode)) {
+                        inviteInfo.inviteCode = cachedCode;
+                        inviteInfo.joinType = Types.JoinType.Normal;
+                        newInviteMap.delete(cachedCode);
+                        break;
+                    }
+                }
             }
+            // If the queue for this guild has drained (no more pending joins), synchronize cache fully
+            if (this.queue.getQueueDepth(guild.id) <= 1) {
+                for (const inv of currentInvites.values()) {
+                    newInviteMap.set(inv.code, inv.uses || 0);
+                }
+            }
+            // Update cache in-place with latest state for next queued member in this guild
+            await this.invites.set(guild.id, newInviteMap);
+            // 5. Persist record to storage
+            await this.storage.recordJoin(inviteInfo).catch((err) => this.emitSafeError(err));
+            // 6. Query updated inviter stats
+            if (inviteInfo.inviterId) {
+                try {
+                    inviteInfo.inviterStats = await this.storage.getMemberStats(guild.id, inviteInfo.inviterId);
+                }
+                catch {
+                    // Stats fetch failed gracefully
+                }
+            }
+            // 7. Dispatch events to both Tracker and Client
+            this.dispatchInviteJoin(member, inviteInfo);
+        });
+    }
+    dispatchInviteJoin(member, info) {
+        this.emit("inviteJoin", member, info);
+        if (this.options.emitOnClient) {
+            this.client.emit("inviteJoin", member, info);
         }
     }
-    async cacheGuildInvites() {
-        for (const guild of this.client.guilds.cache.values()) {
-            await this.cacheGuildInvitesForGuild(guild);
-        }
-    }
-    async inviteJoin(member) {
-        const { guild } = member;
-        const cachedInvites = this.invites.get(guild.id);
-        // InviteInfo Object for output.
-        const inviteInfo = {
-            joinType: Types.JoinType.Unknown, // Default to unknown
-            guildId: guild.id,
-            inviteeId: member.id,
-            fake: await this.detectFakeInvite(member), // Fake invite detection technology.
-            joinedAt: new Date(),
-        };
-        if (!cachedInvites) {
-            await this.cacheGuildInvitesForGuild(guild); // Try to cache for next time
-            this.client.emit("inviteJoin", member, inviteInfo);
+    // ==========================================
+    // Serialized Leave Reconciliation
+    // ==========================================
+    async inviteLeave(member) {
+        if (this.isDestroyed || !member.guild)
             return;
-        }
-        // 1. Fetch current invites to find the one with an increased user count.
-        const newInvites = await guild.invites.fetch();
-        const usedInvite = newInvites.find((inv) => (inv.uses || 0) > (cachedInvites.get(inv.code) || 0));
-        // *. Update cache for synchronization.
-        await this.cacheGuildInvitesForGuild(guild);
-        // 2. If a used invite is found, emit an event with the invite details.
-        if (usedInvite) {
-            inviteInfo.inviterId = usedInvite.inviter?.id;
-            inviteInfo.inviteCode = usedInvite.code;
-            inviteInfo.joinType =
-                usedInvite.code === guild.vanityURLCode
-                    ? Types.JoinType.Vanity
-                    : Types.JoinType.Normal;
-        }
-        else if (guild.vanityURLCode) {
-            // 3. If no invite was used, but the guild has a vanity URL, treat it as a vanity join.
-            const oldVanityUses = cachedInvites.get("VANITY") || 0;
-            const newVanityUses = (await guild.fetchVanityData()).uses || 0;
-            if (newVanityUses > oldVanityUses) {
-                inviteInfo.inviteCode = guild.vanityURLCode;
-                inviteInfo.joinType = Types.JoinType.Vanity;
-            }
-        }
-        // *. Update the vanity uses in the cache (always for more accuracy).
-        if (guild.vanityURLCode) {
+        const guildId = member.guild.id;
+        await this.queue.enqueue(guildId, async () => {
+            let record = null;
             try {
-                const latestVanityData = await guild.fetchVanityData();
-                cachedInvites.set("VANITY", latestVanityData.uses || 0);
+                record = await this.storage.recordLeave(guildId, member.id);
             }
             catch (err) {
-                if (this.options?.verbose)
-                    console.warn(`DisVite: Failed to fetch vanity data for guild ${guild.id}`);
+                this.emitSafeError(err);
             }
-        }
-        //cachedInvites.set("VANITY", newVanityUses);
-        // 4. Save to Database.
-        const inviteData = new this.inviteModel({
-            guildId: guild.id,
-            inviteeId: member.id,
-            inviterId: inviteInfo.inviterId || null,
-            inviteCode: inviteInfo.inviteCode || null,
-            joinType: inviteInfo.joinType,
-            joinedAt: new Date(),
-            leftAt: null, // Set to null initially
+            this.emit("inviteLeave", member, record);
+            if (this.options.emitOnClient) {
+                this.client.emit("inviteLeave", member, record);
+            }
         });
-        await inviteData.save().catch((error) => {
-            if (this.options?.verbose)
-                console.error(`DisVite: Failed to save invite data for ${member.id} in guild ${guild.id}\n`, error);
-        });
-        // 5. Emit an event with the invite info.
-        this.client.emit("inviteJoin", member, inviteInfo);
     }
+    // ==========================================
+    // Fake Invite Detection Engine
+    // ==========================================
     async detectFakeInvite(member) {
-        // Check account age (default is 7 days).
-        const accountAgeLimit = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+        if (member.user.bot)
+            return false;
+        // 1. Check account creation age against threshold
         const accountAge = Date.now() - member.user.createdAt.getTime();
-        if (accountAge < accountAgeLimit) {
+        if (accountAge < this.options.fakeThresholdMs) {
             return true;
         }
-        // Check if account has re-joined the guild multiple times using leftAt.
-        const recentInvites = await this.inviteModel
-            .find({
-            guildId: member.guild.id,
-            inviteeId: member.id,
-            leftAt: { $ne: null },
-        })
-            .sort({ leftAt: -1 });
-        // If the user has left and re-joined the guild multiple times, compare his last leftAt.
-        if (recentInvites.length > 0) {
-            const lastLeftAt = recentInvites[0].leftAt;
-            const rejoinThreshold = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
-            if (Date.now() - lastLeftAt.getTime() < rejoinThreshold) {
+        // 2. Check rapid rejoin threshold via storage adapter
+        try {
+            const isRapidRejoin = await this.storage.isFakeRejoin(member.guild.id, member.id, this.options.rejoinThresholdMs);
+            if (isRapidRejoin) {
                 return true;
             }
         }
-        // Otherwise, this is not a fake invite.
+        catch {
+            // Storage check failed gracefully
+        }
         return false;
     }
-    async inviteLeave(member) {
-        // Find the latest join record to update leftAt.
-        const joinRecord = await this.inviteModel
-            .findOne({
-            guildId: member.guild.id,
-            inviteeId: member.id,
-            leftAt: null, // Only update the latest join record
-        })
-            .sort({ joinedAt: -1 });
-        if (joinRecord) {
-            joinRecord.leftAt = new Date(); // Set the leftAt timestamp.
-            await joinRecord.save().catch((error) => {
-                if (this.options?.verbose)
-                    console.error(`DisVite: Failed to update leftAt for ${member.id} in guild ${member.guild.id}\n`, error);
-            });
+    // ==========================================
+    // Public Management & Analytics API
+    // ==========================================
+    /**
+     * Retrieve comprehensive invite stats for a member in a guild.
+     */
+    async getMemberStats(guildId, userId) {
+        return this.storage.getMemberStats(guildId, userId);
+    }
+    /**
+     * Add or subtract bonus invites for a member in a guild.
+     */
+    async addBonusInvites(guildId, userId, amount) {
+        return this.storage.addBonus(guildId, userId, amount);
+    }
+    /**
+     * Get current bonus invite points for a member in a guild.
+     */
+    async getBonusInvites(guildId, userId) {
+        return this.storage.getBonus(guildId, userId);
+    }
+    /**
+     * Get guild invite leaderboard sorted by net valid invites.
+     */
+    async getLeaderboard(guildId, limit = 10) {
+        return this.storage.getLeaderboard(guildId, limit);
+    }
+    /**
+     * Manually resynchronize invite cache for a specific guild.
+     */
+    async syncGuild(guildOrId) {
+        const guild = typeof guildOrId === "string" ? this.client.guilds.cache.get(guildOrId) : guildOrId;
+        if (!guild) {
+            throw new Error(`DisVite: Guild "${guildOrId}" is not cached or available.`);
         }
-        // Finally emit the custom leave event.
-        this.client.emit("inviteLeave", member, joinRecord);
+        const map = await this.cacheGuildInvitesForGuild(guild);
+        return map.size;
+    }
+    /**
+     * Manually resynchronize invite cache across all guilds.
+     */
+    async syncAll() {
+        await this.cacheGuildInvites();
+    }
+    /**
+     * Teardown tracker: deregister client listeners, clear queues, close database.
+     */
+    async destroy() {
+        this.isDestroyed = true;
+        // Unbind listeners from client
+        this.client.off("ready", this.boundHandlers.ready);
+        this.client.off("guildMemberAdd", this.boundHandlers.guildMemberAdd);
+        this.client.off("guildMemberRemove", this.boundHandlers.guildMemberRemove);
+        this.client.off("inviteCreate", this.boundHandlers.inviteCreate);
+        this.client.off("inviteDelete", this.boundHandlers.inviteDelete);
+        this.client.off("guildCreate", this.boundHandlers.guildCreate);
+        this.client.off("guildDelete", this.boundHandlers.guildDelete);
+        // Clear queues and cache
+        this.queue.clear();
+        await Promise.resolve(this.invites.clear());
+        // Close storage
+        if (this.storage.close) {
+            await this.storage.close();
+        }
+        this.removeAllListeners();
+        this.emitSafeDebug("DisVite: Tracker destroyed cleanly.");
     }
 }
 exports.InviteTracker = InviteTracker;

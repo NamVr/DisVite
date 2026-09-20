@@ -1,89 +1,120 @@
-import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model, Connection } from "mongoose";
 import { InviteSchema } from "./types";
 
 /**
- * Interface representing the schema for an invite in the database.
+ * Interface for bonus invite records in MongoDB.
  */
-const InviteSchema: Schema = new Schema({
-	/**
-	 * The ID of the guild this invite belongs to.
-	 * This is used to associate the invite with a specific guild.
-	 */
+export interface BonusInviteDocument extends Document {
+	guildId: string;
+	userId: string;
+	bonus: number;
+}
+
+/**
+ * Schema for member invite records in MongoDB.
+ */
+export const InviteMongooseSchema: Schema = new Schema({
 	guildId: {
 		type: String,
 		required: true,
 		index: true,
 	},
-
-	/**
-	 * The ID of the person who was invited.
-	 * This is the user ID of the member who used the invite.
-	 */
 	inviteeId: {
 		type: String,
 		required: true,
 		index: true,
 	},
-
-	/**
-	 * The user ID of the user who created the invite.
-	 * This can be null if the inviter is unknown or if the invite is a vanity URL.
-	 */
 	inviterId: {
 		type: String,
 		index: true,
-		default: null, // null if the inviter is unknown.
+		default: null,
 	},
-
-	/**
-	 * The ID of the invite, discord.gg/invite/{inviteCode}.
-	 * This can be null if the invite is unknown.
-	 */
 	inviteCode: {
 		type: String,
-		default: null, // null if the invite is unknown.
+		default: null,
 	},
-
-	/**
-	 * The type of the invite.
-	 * This can be "normal" for regular invites, "vanity" for vanity URLs, or "unknown" for unknown invites.
-	 */
 	joinType: {
 		type: String,
-		enum: ["normal", "vanity", "unknown"],
+		enum: ["normal", "vanity", "unknown", "bot"],
 		required: true,
 	},
-
-	/**
-	 * The timestamp when the user joined the guild.
-	 * This is typically the current date and time when the invite was used.
-	 */
 	joinedAt: {
 		type: Date,
 		required: true,
+		index: true,
 	},
-
-	/**
-	 * The timestamp when the user left the guild, if applicable.
-	 * This is set to null initially and can be updated when the user leaves the guild.
-	 */
 	leftAt: {
 		type: Date,
-		default: null, // only if applicable.
+		default: null,
+		index: true,
 	},
-
-	/**
-	 * Whether the invite is fake or not (detected by module).
-	 * This is set to true if the invite is detected as fake, otherwise false.
-	 */
 	fake: {
 		type: Boolean,
 		default: false,
+		index: true,
 	},
 });
 
+// Compound indexes for optimized query performance in large guilds
+InviteMongooseSchema.index({ guildId: 1, inviterId: 1, leftAt: 1, fake: 1 });
+InviteMongooseSchema.index({ guildId: 1, inviteeId: 1, leftAt: 1, joinedAt: -1 });
+
+/**
+ * Schema for manual bonus / penalty invite counts.
+ */
+export const BonusMongooseSchema: Schema = new Schema({
+	guildId: {
+		type: String,
+		required: true,
+		index: true,
+	},
+	userId: {
+		type: String,
+		required: true,
+		index: true,
+	},
+	bonus: {
+		type: Number,
+		default: 0,
+	},
+});
+
+BonusMongooseSchema.index({ guildId: 1, userId: 1 }, { unique: true });
+
+/**
+ * Safely retrieve or compile the Mongoose model for invites, preventing OverwriteModelError.
+ */
 export function getInviteModel(
-	modelName: string = "inviteSchema"
+	modelName: string = "inviteSchema",
+	connection?: Connection
 ): Model<InviteSchema & Document> {
-	return mongoose.model<InviteSchema & Document>(modelName, InviteSchema);
+	if (connection) {
+		return (
+			(connection.models[modelName] as Model<InviteSchema & Document>) ||
+			connection.model<InviteSchema & Document>(modelName, InviteMongooseSchema)
+		);
+	}
+	return (
+		(mongoose.models[modelName] as Model<InviteSchema & Document>) ||
+		mongoose.model<InviteSchema & Document>(modelName, InviteMongooseSchema)
+	);
+}
+
+/**
+ * Safely retrieve or compile the Mongoose model for bonus invites.
+ */
+export function getBonusInviteModel(
+	modelName: string = "bonusInviteSchema",
+	connection?: Connection
+): Model<BonusInviteDocument> {
+	if (connection) {
+		return (
+			(connection.models[modelName] as Model<BonusInviteDocument>) ||
+			connection.model<BonusInviteDocument>(modelName, BonusMongooseSchema)
+		);
+	}
+	return (
+		(mongoose.models[modelName] as Model<BonusInviteDocument>) ||
+		mongoose.model<BonusInviteDocument>(modelName, BonusMongooseSchema)
+	);
 }
